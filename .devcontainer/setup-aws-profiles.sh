@@ -41,11 +41,20 @@ else
 fi
 
 # --- Región -------------------------------------------------------------------
+# Cargar .env si existe (Codespaces/local sin direnv en esta shell)
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$ROOT/.env" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ROOT/.env"
+  set +a
+fi
+
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 if [ -n "$REGION" ]; then
   ok "Región AWS: $REGION"
 else
-  warn "No hay región definida (AWS_REGION / AWS_DEFAULT_REGION). El curso usa, p. ej., eu-west-1."
+  warn "No hay región definida (AWS_REGION / AWS_DEFAULT_REGION). El curso usa us-east-2."
 fi
 
 # --- (Opcional) Asunción de rol ----------------------------------------------
@@ -62,13 +71,17 @@ if [ -n "${AWS_ROLE_ARN:-}" ]; then
     [ -n "$REGION" ] && echo "region = ${REGION}"
     echo "role_session_name = ${AWS_ROLE_SESSION_NAME:-tf-curso}"
   } > "$HOME/.aws/config"
-  ok "Perfil 'lab' creado en ~/.aws/config (úsalo con: export AWS_PROFILE=lab)"
+  ok "Perfil 'lab' creado en ~/.aws/config"
+  info "Usa: aws --profile lab sts get-caller-identity"
+  info "(AWS_PROFILE=lab no basta si las keys están también en el entorno.)"
 fi
 
 # --- ¿Hay credenciales? -------------------------------------------------------
 echo
 bold "Comprobando acceso a AWS:"
-if aws sts get-caller-identity >/tmp/_idn 2>/tmp/_iderr; then
+AWS_ID_CMD=(aws sts get-caller-identity)
+[ -n "${AWS_ROLE_ARN:-}" ] && AWS_ID_CMD=(aws --profile lab sts get-caller-identity)
+if "${AWS_ID_CMD[@]}" >/tmp/_idn 2>/tmp/_iderr; then
   ok "Autenticado en AWS como:"
   jq -r '"      Account: \(.Account)\n      Arn:     \(.Arn)"' /tmp/_idn 2>/dev/null || cat /tmp/_idn
 else
